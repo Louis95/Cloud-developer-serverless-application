@@ -1,0 +1,100 @@
+service:
+  name: serverless-todo-app
+
+plugins:
+  - serverless-webpack
+  - serverless-iam-roles-per-function
+  - serverless-reqvalidator-plugin
+
+provider:
+  name: aws
+  runtime: nodejs8.10
+
+  stage: ${opt:stage, 'dev'}
+  region: ${opt:region, 'us-east-1'}
+
+  environment:
+     TODO_TABLE: Todos-${self:provider.stage}
+     INDEX_NAME: TodoIdIndex
+     IMAGES_BUCKET: serverless-todo-app-bucket-{self:provider.stage}
+     SIGNED_URL_EXPIRATION: 300
+
+functions:
+
+  Auth:
+    handler: src/lambda/auth/auth0Authorizer.handler
+
+  # TODO: Configure this function
+  GetTodos:
+    handler: src/lambda/http/getTodos.handler
+    events:
+      - http:
+          method: get
+          path: todos
+          cors: true
+    
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb: Query
+          - dynamodb: Scan
+          - dynamodb: GetItem
+        Resources: aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE}/index/${self:provider.environment.INDEX_NAME}
+      - Effect: Allow
+        Action:
+          - dynamodb: Query
+        Resources: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE}
+
+
+  # TODO: Configure this function
+  CreateTodo:
+    handler: src/lambda/http/createTodo.handler
+    events:
+      - http:
+          method: post
+          path: todos
+          authorizer: Auth
+          cors: true
+          reqvalidatorName: RequestBodyValidator
+          documentation:
+            summary: Create todo task
+            description: Create a new todo item 
+            requestModels:
+              'application/json': CreateTodRequest
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - dynamodb: PutItem
+        resources: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE}
+        - Effect: Allow
+          Action:
+            - dynamodb: PutItem
+          
+
+  # TODO: Configure this function
+  UpdateTodo:
+    handler: src/lambda/http/updateTodo.handler
+    events:
+      - http:
+          method: patch
+          path: todos/{todoId}
+
+  # TODO: Configure this function
+  DeleteTodo:
+    handler: src/lambda/http/deleteTodo.handler
+    events:
+      - http:
+          method: delete
+          path: todos/{todoId}
+
+  # TODO: Configure this function
+  GenerateUploadUrl:
+    handler: src/lambda/http/generateUploadUrl.handler
+    events:
+      - http:
+          method: post
+          path: todos/{todoId}/attachment
+
+resources:
+  Resources:
+    # TODO: Add any necessary AWS resources
